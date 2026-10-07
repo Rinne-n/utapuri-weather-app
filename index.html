@@ -94,8 +94,13 @@ button{font:inherit;color:inherit}
 .newtag{position:absolute;top:10px;right:8px;z-index:2;font-family:var(--display);font-weight:800;font-size:11px;background:var(--pink);color:#fff;padding:2px 8px;border-radius:999px;opacity:0}
 .stamp{padding:6px 10px 8px;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
 .stamp b{font-family:var(--display);font-weight:800;color:var(--ink);font-size:12px}
-.speech{position:absolute;left:12px;right:12px;bottom:12px;z-index:7;opacity:0;background:rgba(255,255,255,.96);border-radius:14px;padding:9px 14px;line-height:1.6}
+.speech{position:absolute;left:12px;right:12px;bottom:12px;z-index:7;opacity:0;display:flex;flex-direction:column;gap:6px}
+.speech p{margin:0;background:rgba(255,255,255,.96);border-radius:14px;padding:9px 14px;line-height:1.6}
 .speech small{display:block;font-family:var(--display);font-weight:800;color:var(--pink);font-size:11px}
+/* デュエットは2人の吹き出しを左右にずらして並べる（名前の横に、その人の色の帯） */
+.speech.duo p{padding:6px 12px;font-size:12px;line-height:1.45;box-shadow:inset 5px 0 0 var(--who,var(--pink))}
+.speech.duo p:first-child{margin-right:12%}.speech.duo p:last-child{margin-left:12%}
+.speech.duo small{display:inline;margin-right:6px}
 .idle{position:absolute;z-index:5;bottom:9%;text-align:center;font-family:var(--display);font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(120,40,110,.7),0 0 12px rgba(150,60,140,.6);font-size:15px}
 
 .btn{font-family:var(--display);font-weight:800;border:none;cursor:pointer;border-radius:18px;padding:12px 8px 14px;color:#fff;font-size:17px;line-height:1.2;width:100%;
@@ -118,6 +123,15 @@ button{font:inherit;color:inherit}
 .slot .r{position:absolute;left:0;bottom:0;font-size:12px;color:#fff;background:rgba(58,35,80,.55);padding:0 6px;border-top-right-radius:6px}
 .slot .n{position:absolute;right:3px;top:3px;font-family:var(--display);font-style:normal;font-size:10px;background:#fff;color:var(--ink);border-radius:999px;padding:0 5px}
 .slot:disabled{cursor:default}
+.grid.mini{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-top:6px}
+.grid.mini .slot{border-radius:6px;font-size:11px}
+.grid.mini .slot .r{font-size:9px;padding:0 4px}
+.mini-h{margin:8px 0 0;font-family:var(--display);font-weight:800;font-size:11px;color:var(--ink-soft)}
+.filters{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chips b{font-family:var(--display);font-weight:800;font-size:11px;color:var(--ink-soft);margin-right:2px}
+.chip{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;font-family:var(--display);font-weight:800;font-size:11px;color:var(--ink-soft);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--pink);border-color:var(--pink);color:#fff}
 .modal{position:fixed;inset:0;z-index:50;background:rgba(20,10,38,.6);display:grid;place-items:center;padding:24px 16px}
 .modal-card{background:#fff;border-radius:20px;width:100%;max-width:360px;max-height:90%;overflow:auto;padding:12px}
 .modal-card img{width:100%;border-radius:12px;display:block}
@@ -125,6 +139,7 @@ button{font:inherit;color:inherit}
 .hist{list-style:none;margin:0;padding:0;font-size:12px}
 .hist li{padding:6px 2px;border-top:1px solid var(--line);line-height:1.6}
 .hist b{font-variant-numeric:tabular-nums;font-weight:700;margin-right:6px}
+.hist span{white-space:pre-line}
 
 /* talk */
 .talk{display:flex;flex-direction:column;gap:10px}
@@ -195,7 +210,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
         </div>
       </div>
       <div class="idle" id="idle">タップで、今日のカードを</div>
-      <div class="speech" id="speech"><small id="speaker"></small><span id="speechText"></span></div>
+      <div class="speech" id="speech"></div>
     </div>
     <button class="btn" id="pull" type="button"><small>1日1回 無料</small>カードを引く</button>
   </section>
@@ -204,6 +219,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
   <section class="screen" id="s-book" hidden>
     <div class="panel">
       <div class="book-h">図鑑 <span id="bookCount">0 / 0</span></div>
+      <div class="filters" id="filters"></div>
       <div id="book"></div>
     </div>
   </section>
@@ -288,15 +304,13 @@ const KEY = new URLSearchParams(location.search).get('k');
       rain:['#9ec0ff','#c9a8ff','#ffffff','#7fe0ff'], snow:['#ffffff','#bfe3ff','#ffd6f0','#ffffff'] }[key];
     const SCREEN_TINT = { sunny:'#ffc6a0', cloudy:'#cdbdff', rain:'#7f9cff', snow:'#e6ecff' }[key];
     const RIGS = [.26,.402,.597,.737]; // 背景の絵の照明の位置
-    let W = 0, H = 0, t = 0, SC = null, motes = [];
-    const rnd = (a,b) => a + Math.random()*(b-a);
+    let W = 0, H = 0, t = 0, motes = [];
 
     // 他のタブを開いている間は大きさが0になるので、見えている時だけ大きさを合わせる
     function size(){
       const r = cv.getBoundingClientRect(), d = Math.min(2, devicePixelRatio||1);
       if (!r.width) { W = 0; return; }
       W = r.width; H = r.height; cv.width = W*d; cv.height = H*d; ctx.setTransform(d,0,0,d,0,0);
-      SC = null;
       motes = Array.from({length:36},()=>({x:Math.random()*W,y:Math.random()*H,s:1+Math.random()*2.5,v:.06+Math.random()*.16,ph:Math.random()*6}));
     }
 
@@ -304,183 +318,219 @@ const KEY = new URLSearchParams(location.search).get('k');
     function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
     function sparkle4(x,y,r){ ctx.beginPath(); ctx.moveTo(x,y-r); ctx.quadraticCurveTo(x+r*.12,y-r*.12,x+r,y); ctx.quadraticCurveTo(x+r*.12,y+r*.12,x,y+r); ctx.quadraticCurveTo(x-r*.12,y+r*.12,x-r,y); ctx.quadraticCurveTo(x-r*.12,y-r*.12,x,y-r); ctx.fill(); }
 
-    // ふわっとした雲のスプライト（明るい上側と、影の下側）
-    function cloudSprite(w, h, top, bottom, puffs = 9){
-      const c = document.createElement('canvas'), d = 2; c.width = w*d; c.height = h*d;
-      const g = c.getContext('2d'); g.scale(d,d);
-      const P = [];
-      for(let i=0;i<puffs;i++){ const x = w*(.12 + .76*i/(puffs-1)) + rnd(-w*.04,w*.04); const r = h*(.22 + .28*Math.sin(Math.PI*i/(puffs-1))) * rnd(.85,1.15); P.push([x, h*.68 - r*.55, r]); }
-      for(let i=0;i<5;i++) P.push([rnd(w*.3,w*.7), h*.38 + rnd(-h*.08,h*.06), h*rnd(.22,.32)]);
-      // 同じ色の円を、ぼかした影つきで重ねる（輪郭の線が出ないように）
-      g.fillStyle = top; g.shadowColor = top; g.shadowBlur = h*.12;
-      g.beginPath(); for(const [x,y,r] of P){ g.moveTo(x + r*.82, y); g.arc(x, y, r*.82, 0, 7); } g.fill();
-      g.shadowBlur = 0;
-      // 上側のハイライト
-      const hl = g.createLinearGradient(0, 0, 0, h*.6); hl.addColorStop(0, 'rgba(255,255,255,.55)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
-      g.globalCompositeOperation = 'source-atop'; g.fillStyle = hl; g.fillRect(0, 0, w, h);
-      const sh = g.createLinearGradient(0, h*.3, 0, h); sh.addColorStop(0,'rgba(0,0,0,0)'); sh.addColorStop(1, bottom);
-      g.fillStyle = sh; g.fillRect(0,0,w,h);
-      return c;
+    // ===== スクリーンの天気（WebGL のシェーダーで描く） =====
+    const GLSL_COMMON = `
+      #ifdef GL_FRAGMENT_PRECISION_HIGH
+      precision highp float;
+      #else
+      precision mediump float;
+      #endif
+      uniform vec2 u_res; uniform float u_t;
+      float h11(float p){ p = fract(p*.1031); p *= p + 33.33; p *= p + p; return fract(p); }
+      float h21(vec2 p){ vec3 q = fract(vec3(p.xyx)*.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y)*q.z); }
+      vec2 h22(vec2 p){ vec3 q = fract(vec3(p.xyx)*vec3(.1031,.1030,.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz)*q.zy); }
+      float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3. - 2.*f);
+        return mix(mix(h21(i), h21(i + vec2(1.,0.)), f.x), mix(h21(i + vec2(0.,1.)), h21(i + vec2(1.,1.)), f.x), f.y); }
+      float fbm(vec2 p){ float v = 0., a = .5; for(int i = 0; i < 5; i++){ v += a*vnoise(p); p = p*2.03 + vec2(1.7,9.2); a *= .5; } return v; }
+      // 街並み：x の位置にあるビルの高さ
+      float bh(float x, float n, float lo, float hi, float seed){ return lo + (hi - lo)*h11(floor(x*n) + seed); }
+      // 窓の形（p はマス目の座標）
+      float win(vec2 p, float soft){ vec2 g = fract(p); return smoothstep(.5, .5 - soft, abs(g.x - .5)*1.6)*smoothstep(.5, .5 - soft, abs(g.y - .5)*1.8); }
+      // 4本の光のきらめき
+      float star(vec2 d, float s){ d /= s; float c = max(0., 1. - abs(d.x*d.y)*60.)*max(0., 1. - length(d)); return c*c + .4*exp(-dot(d,d)*30.); }
+      // 仕上げ：明るいところをにじませて、四隅を暗くする
+      vec3 finish(vec3 col, vec2 uv){ col += col*col*.25; vec2 q = (uv - .5)*vec2(1.,1.4); return col*(1. - .3*dot(q,q)); }
+    `;
+    const GLSL = {
+      // 晴れ：朝の青空。太陽の光の筋、光に縁どられた雲、レンズフレア、窓のきらめき
+      sunny: `
+      void main(){
+        vec2 uv = gl_FragCoord.xy/u_res; float A = u_res.x/u_res.y, x = uv.x*A; vec2 p = vec2(x, uv.y);
+        vec2 sp = vec2(A*.76, .74), d = p - sp; float r = length(d);
+        vec3 col = mix(vec3(1.,.83,.8), vec3(.3,.55,.98), smoothstep(0.,.95,uv.y));
+        col += vec3(1.,.9,.7)*exp(-r*3.5)*.55 + vec3(1.,.97,.9)*exp(-r*14.)*.9;
+        // ゆっくり回る光の筋
+        float a = atan(d.y, d.x);
+        float rays = vnoise(vec2(a*5. + u_t*.03, 1.))*.6 + vnoise(vec2(a*11. - u_t*.05, 4.))*.4;
+        col += vec3(1.,.95,.8)*pow(rays, 3.)*exp(-r*1.6)*.55;
+        // 雲（太陽の側がふちどりで光る）
+        for(int L = 0; L < 2; L++){ float fl = float(L);
+          vec2 cp = vec2(x*(1.4 + fl*.6) + u_t*(.012 + fl*.01) + fl*3., uv.y*(3.2 + fl));
+          float den = fbm(cp);
+          float band = smoothstep(.3 + fl*.05, .42 + fl*.05, uv.y)*smoothstep(.72 - fl*.1, .54 - fl*.1, uv.y);
+          float cd = smoothstep(.56,.78,den)*band;
+          float lit = clamp((den - fbm(cp + normalize(sp - p)*vec2(.2,.3)))*3. + .5, 0., 1.);
+          vec3 cc = mix(vec3(.84,.8,.96), vec3(1.,.99,.97), lit) + vec3(1.,.85,.7)*exp(-r*3.)*.3;
+          col = mix(col, cc, cd*(.92 - fl*.15));
+          col += vec3(1.,.9,.75)*cd*(1. - cd)*exp(-r*2.)*.9; }
+        // 遠くのビル（空の色にかすむ）と、手前のビル
+        float e = .004;
+        float hb1 = bh(x, 14., .2, .32, 0.);
+        col = mix(col, mix(vec3(.74,.68,.92), col, .45), smoothstep(hb1 + e, hb1 - e, uv.y));
+        float hb2 = bh(x + .5/6., 6., .1, .32, 1.), side = fract(x*6. + .5);
+        vec3 bc = mix(vec3(.5,.42,.74), vec3(.7,.6,.88), smoothstep(.62,.7,side));
+        vec2 wid = floor(vec2(x*30., uv.y*34.));
+        float w = win(vec2(x*30., uv.y*34.), .1)*step(uv.y, hb2 - .015);
+        bc = mix(bc, mix(vec3(.72,.86,1.), vec3(1.,.9,.95), h21(wid)), w*.5*step(.45, h21(wid + 7.)));
+        bc += vec3(1.)*w*pow(max(0., sin(u_t*.7 + h21(wid + 3.)*60.)), 40.)*step(.8, h21(wid + 5.));
+        col = mix(col, bc, smoothstep(hb2 + e, hb2 - e, uv.y));
+        // レンズフレア
+        vec2 dir = vec2(A*.5, .45) - sp;
+        for(int i = 0; i < 4; i++){ float fi = float(i);
+          vec2 fp = sp + dir*(.7 + fi*.45); float rr = .03 + .03*h11(fi + 2.), fd = length(p - fp);
+          vec3 fc = fi < 1. ? vec3(1.,.6,.85) : (fi < 2. ? vec3(.6,.9,1.) : (fi < 3. ? vec3(1.,.9,.6) : vec3(.8,.7,1.)));
+          col += fc*(smoothstep(rr, rr*.8, fd)*.12 + smoothstep(rr*1.05, rr, fd)*smoothstep(rr*.85, rr, fd)*.16); }
+        // 太陽のまわりのきらめき
+        for(int i = 0; i < 10; i++){ float fi = float(i);
+          vec2 kp = sp + (h22(vec2(fi, 1.)) - .5)*vec2(1.,.7);
+          col += vec3(1.)*star(p - kp, .035)*pow(max(0., sin(u_t*.8 + fi*2.1)), 8.); }
+        gl_FragColor = vec4(finish(col, uv), 1.);
+      }`,
+      // 曇り：何層も流れる雲と、切れ間からゆっくり差しこむ光
+      cloudy: `
+      void main(){
+        vec2 uv = gl_FragCoord.xy/u_res; float A = u_res.x/u_res.y, x = uv.x*A; vec2 p = vec2(x, uv.y);
+        vec3 col = mix(vec3(.88,.84,.93), vec3(.6,.6,.8), uv.y);
+        vec2 lp = vec2(A*.66, .9), v = p - lp;
+        col += vec3(1.,.95,.88)*exp(-length(v)*4.)*.4;
+        float breathe = .5 + .5*sin(u_t*.15);
+        for(int L = 0; L < 3; L++){ float fl = float(L);
+          vec2 cp = vec2(x*(1. + fl*.5) + u_t*(.006 + fl*.01) + fl*7., uv.y*(2. + fl*.8) + fl*2.);
+          float den = fbm(cp);
+          float cd = smoothstep(.44 - fl*.04, .7, den)*smoothstep(.15, .45, uv.y + fl*.12);
+          float shade = clamp((den - fbm(cp + vec2(0.,.25)))*2.5 + .55, 0., 1.);
+          vec3 c = mix(mix(vec3(.58,.54,.72), vec3(.44,.42,.62), fl*.5), mix(vec3(.97,.95,1.), vec3(.9,.88,.98), fl*.5), shade);
+          col = mix(col, c, cd*(.72 + fl*.1));
+          // 雲の切れ間から差す光の筋（奥の雲の手前に重ねる）
+          if (L == 0) {
+            float ang = atan(v.x, -v.y);
+            float rays = smoothstep(.4, .95, vnoise(vec2(ang*6. + 3., u_t*.03)));
+            col += vec3(1.,.96,.88)*rays*exp(-length(v)*1.2)*smoothstep(.05, -.15, v.y)*(.1 + .18*breathe);
+          } }
+        // 街並み（窓にはいくつか、あかり）
+        float e = .004;
+        float hb1 = bh(x, 14., .18, .3, 0.);
+        col = mix(col, mix(vec3(.66,.62,.82), col, .4), smoothstep(hb1 + e, hb1 - e, uv.y));
+        float hb2 = bh(x + .5/6., 6., .1, .3, 1.);
+        vec2 wid = floor(vec2(x*30., uv.y*34.));
+        float w = win(vec2(x*30., uv.y*34.), .1)*step(uv.y, hb2 - .015)*step(.72, h21(wid));
+        vec3 bc = vec3(.44,.4,.62) + vec3(1.,.85,.6)*w*.65;
+        col = mix(col, bc, smoothstep(hb2 + e, hb2 - e, uv.y));
+        gl_FragColor = vec4(finish(col, uv), 1.);
+      }`,
+      // 雨：雨の夜の街。ぼやけた街あかりの前を、雨が奥・中・手前の3層で降る
+      rain: `
+      void main(){
+        vec2 uv = gl_FragCoord.xy/u_res; float A = u_res.x/u_res.y, x = uv.x*A; vec2 p = vec2(x, uv.y);
+        float blur = .4;
+        vec3 col = mix(vec3(.3,.26,.52), vec3(.07,.07,.2), uv.y);
+        col += vec3(.75,.32,.62)*exp(-uv.y*3.2)*.6; // 街あかりで空の下がピンクに染まる
+        // 流れる雨雲（下側が街あかりに照らされる）
+        float c = fbm(vec2(x*1.1 + u_t*.015, uv.y*2.2 - u_t*.004));
+        float c2 = fbm(vec2(x*2.3 - u_t*.008, uv.y*4.) + 5.);
+        float cl = smoothstep(.38,.8,c)*smoothstep(.3,.8,uv.y);
+        col = mix(col, mix(vec3(.62,.44,.74), vec3(.2,.18,.38), smoothstep(.35,.95,uv.y)) + (c2 - .5)*.25, cl*.9);
+        // 遠くのビルと、屋上の赤いランプ（ゆっくり点滅）
+        float e = .004 + blur*.012;
+        float bi = floor(x*16.), hb1 = bh(x, 16., .26, .4, 0.);
+        col = mix(col, vec3(.2,.14,.34) + col*.3, smoothstep(hb1 + e, hb1 - e, uv.y)*.8);
+        float tl = (.5 + .5*sin(u_t*1.2 + bi*1.7))*step(.65, h11(bi + 3.));
+        col += vec3(1.,.25,.4)*tl*exp(-length(p - vec2((bi + .5)/16., hb1 + .01))*(110. - blur*70.))*.9;
+        // 手前のビルと窓のあかり
+        float hb2 = bh(x + .3/7., 7., .14, .38, 2.);
+        vec2 wid = floor(vec2(x*35., uv.y*34.));
+        float lit = step(.6, h21(wid))*step(uv.y, hb2 - .015);
+        vec3 wc = mix(vec3(1.,.78,.45), vec3(1.,.55,.8), step(.8, h21(wid + 9.)));
+        col = mix(col, vec3(.05,.05,.12) + wc*win(vec2(x*35., uv.y*34.), .08 + blur*.35)*lit*.9, smoothstep(hb2 + e, hb2 - e, uv.y));
+        // 足もとの街あかり（雨にけむって、丸いボケになる）
+        for(int i = 0; i < 24; i++){ float fi = float(i);
+          vec2 bp = vec2(h11(fi*1.7 + .3)*A + sin(u_t*.05 + fi)*.02, .02 + .3*pow(h11(fi*2.9 + 1.), 1.6));
+          float r = .014 + .07*blur*(.6 + .6*h11(fi + 4.)), d = length(p - bp);
+          vec3 bc = fi < 8. ? vec3(1.,.5,.78) : (fi < 16. ? vec3(1.,.78,.45) : vec3(.55,.75,1.));
+          float tw = .75 + .25*sin(u_t*.5 + fi*2.3);
+          float disk = smoothstep(r, r*(.8 - blur*.25), d), rim = smoothstep(r*.6, r, d)*disk;
+          col += bc*tw*(disk*(.28 + .1*rim) + .08*exp(-d*(30. - blur*14.))); }
+        col = mix(col, vec3(.4,.36,.6), .08); // 雨のもや
+        // 降る雨（0:手前の太い雨 1:中 2:奥の細い雨）
+        for(int L = 0; L < 3; L++){ float fl = float(L), sc = 30. + fl*40.;
+          float xx = x + uv.y*(.1 + fl*.03), o = h11(floor(xx*sc) + fl*13.);
+          float fy = fract(uv.y*(.8 + fl*.5) + u_t*(1. + .4*o - fl*.2) + o*7.);
+          float seg = smoothstep(0.,.04,fy)*smoothstep(.3 - fl*.08, .04, fy);
+          float w = smoothstep(1., 0., abs(fract(xx*sc) - .5)*(4. + fl*2.5));
+          col += vec3(.78,.82,1.)*seg*w*step(.5 + .1*(1. - fl), o)*(.38 - fl*.1); }
+        gl_FragColor = vec4(finish(col, uv), 1.);
+      }`,
+      // 雪：やわらかい雪空。屋根に積もった雪と、奥・中・手前で大きさの違う雪
+      snow: `
+      void main(){
+        vec2 uv = gl_FragCoord.xy/u_res; float A = u_res.x/u_res.y, x = uv.x*A; vec2 p = vec2(x, uv.y);
+        vec3 col = mix(vec3(.9,.89,.97), vec3(.5,.58,.86), uv.y);
+        float c = fbm(vec2(x*1.2 + u_t*.008, uv.y*2.5));
+        col = mix(col, vec3(.9,.9,.98), smoothstep(.45,.75,c)*smoothstep(.35,.8,uv.y)*.4);
+        col += vec3(1.,.97,.92)*exp(-length(p - vec2(A*.25, .8))*5.)*.18; // うす雲ごしの太陽
+        // 遠くのビル（屋上がうっすら白い）
+        float e = .004;
+        float hb1 = bh(x, 14., .2, .32, 0.);
+        vec3 fc = mix(mix(vec3(.7,.72,.9), col, .45), vec3(.96,.97,1.), smoothstep(hb1 - .012, hb1 - .006, uv.y));
+        col = mix(col, fc, smoothstep(hb1 + e, hb1 - e, uv.y));
+        // 手前のビル。屋根に雪が積もり、窓はあたたかい色
+        float hb2 = bh(x + .5/6., 6., .1, .3, 1.);
+        vec2 wid = floor(vec2(x*30., uv.y*34.));
+        float w = win(vec2(x*30., uv.y*34.), .1)*step(uv.y, hb2 - .022)*step(.55, h21(wid));
+        vec3 bc = vec3(.42,.44,.66) + vec3(1.,.82,.55)*w*.8;
+        float cap = smoothstep(hb2 - .022 + .005*sin(x*90.), hb2 - .014, uv.y);
+        col = mix(col, mix(bc, vec3(.97,.98,1.), cap), smoothstep(hb2 + e, hb2 - e, uv.y));
+        col = mix(col, vec3(.95,.96,1.), smoothstep(.07, 0., uv.y)*.9); // 積もった雪
+        // 降る雪（0:奥 1:中 2:手前のボケた大きな雪）
+        for(int L = 0; L < 3; L++){ float fl = float(L);
+          float sc = 22. - fl*8., sz = .06 + fl*.035, speed = .05 + fl*.04;
+          vec2 q = p*sc; q.y += u_t*speed*sc; q.x += sin(q.y*.35 + fl*2. + u_t*.4)*.35;
+          vec2 id = floor(q), f = fract(q) - .5, o = (h22(id + fl*17.) - .5)*.6;
+          float ex = step(.35, h21(id + fl*5.)), s = sz*(.7 + .6*h21(id + 2.)), d = length(f - o);
+          float soft = fl > 1.5 ? s*.9 : s*.35;
+          col = mix(col, vec3(1.), smoothstep(s, s - soft, d)*ex*(fl > 1.5 ? .35 : .92));
+          if (L == 1) col += vec3(1.)*star(f - o, s*3.)*pow(max(0., sin(u_t*1.3 + h21(id)*30.)), 20.)*ex*.6; }
+        gl_FragColor = vec4(finish(col, uv), 1.);
+      }`
+    };
+    // WebGL が使えない時の、スクリーンの色
+    const FALLBACK = { sunny:['#4f9cff','#ffd2b0'], cloudy:['#a9a3d6','#f1e6f4'], rain:['#2f3a6e','#8c90c4'], snow:['#8fa4dd','#eef2ff'] };
+    // 今日の天気のシェーダーを用意する。WebGL が使えない時は null
+    function makeGL(){
+      const c = document.createElement('canvas'), gl = c.getContext('webgl', { alpha: false, antialias: false });
+      if (!gl) return null;
+      const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+      const pr = gl.createProgram();
+      try {
+        gl.attachShader(pr, sh(gl.VERTEX_SHADER, 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }'));
+        gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, GLSL_COMMON + GLSL[key]));
+        gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+      } catch (e) { console.warn('天気のシェーダーを作れなかった', e); return null; }
+      gl.useProgram(pr);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      const uRes = gl.getUniformLocation(pr, 'u_res'), uT = gl.getUniformLocation(pr, 'u_t');
+      return { c, draw(w, h){
+        if (c.width !== w || c.height !== h) { c.width = w; c.height = h; gl.viewport(0, 0, w, h); }
+        // 時間は1時間で一周させる（スマホの精度の低い計算でも、動きがカクつかないように）
+        gl.uniform2f(uRes, w, h); gl.uniform1f(uT, performance.now()/1000 % 3600);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      } };
     }
-
-    function skyline(s){
-      const out = []; let x = s.x - 4;
-      while(x < s.x + s.w){ const w = rnd(s.w*.05, s.w*.11); out.push({ x, w, h: rnd(s.h*.08, s.h*.24), tower: Math.random() < .12, win: Array.from({length: 8}, () => Math.random()) }); x += w + rnd(0, 3); }
-      return out;
-    }
-
-    function initScreen(){
-      const s = scr(), sp = (n, f) => Array.from({length:n}, f);
-      SC = { s, city: skyline(s), clouds: [], streaks: [], splash: [], beads: [], slides: [], flakes: [], glints: [], flash: 0, nextFlash: 240 };
-      const cw = s.w*.55, ch = s.h*.3;
-      if(key === 'sunny'){
-        SC.clouds = sp(3, () => ({ img: cloudSprite(cw*rnd(.7,1), ch*rnd(.7,.9), 'rgba(255,255,255,.95)', 'rgba(255,190,160,.35)'), x: rnd(0, s.w), y: s.h*rnd(.38,.6), v: rnd(.025,.06), a: rnd(.7,.95) }));
-        SC.glints = sp(14, () => ({ x: rnd(0,1), y: rnd(.1,.7), ph: rnd(0,6) }));
-      }
-      if(key === 'cloudy'){
-        const layers = [['rgba(205,198,232,.95)','rgba(120,110,170,.45)',.018,.55], ['rgba(232,226,248,.97)','rgba(140,130,190,.4)',.035,.75], ['rgba(255,255,255,.98)','rgba(150,140,200,.35)',.06,.95]];
-        layers.forEach(([top,bot,v,a],L) => { for(let i=0;i<3;i++) SC.clouds.push({ img: cloudSprite(cw*rnd(.9,1.3)*(1+L*.15), ch*rnd(.9,1.2)*(1+L*.15), top, bot, 11), x: rnd(-cw, s.w), y: s.h*(.05 + L*.18 + rnd(0,.12)), v, a, L }); });
-      }
-      if(key === 'rain'){
-        [['rgba(120,128,170,.95)','rgba(30,36,80,.6)',.03,.9],['rgba(150,158,200,.95)','rgba(40,46,96,.55)',.055,.95]].forEach(([top,bot,v,a],L) => { for(let i=0;i<3;i++) SC.clouds.push({ img: cloudSprite(cw*rnd(1.1,1.5), ch*rnd(1,1.3), top, bot, 12), x: rnd(-cw, s.w), y: s.h*(-.05 + L*.12 + rnd(0,.08)), v, a, L }); });
-        SC.streaks = sp(55, () => ({ x: rnd(-.1,1.1), y: rnd(0,1), z: Math.random() }));
-        SC.beads = sp(26, () => ({ x: rnd(.02,.98), y: rnd(.04,.96), r: rnd(1,2.6) }));
-        SC.slides = sp(4, () => ({ x: rnd(.05,.95), y: rnd(-.3,.4), v: rnd(.0005,.0014), r: rnd(2.2,3.4), trail: [] }));
-      }
-      if(key === 'snow'){
-        SC.clouds = sp(3, () => ({ img: cloudSprite(cw*1.2, ch, 'rgba(240,244,255,.9)', 'rgba(150,160,210,.35)', 11), x: rnd(-cw, s.w), y: s.h*rnd(-.05,.12), v: .02, a: .85 }));
-        SC.flakes = sp(90, () => ({ x: rnd(0,1), y: rnd(0,1), z: Math.random(), ph: rnd(0,6) }));
-      }
-    }
-
-    function drawCity(s, body, lit, roofSnow){
-      const base = s.y + s.h;
-      for(const b of SC.city){
-        const top = base - b.h;
-        ctx.fillStyle = body; ctx.fillRect(b.x, top, b.w, b.h);
-        if(b.tower){ ctx.fillRect(b.x + b.w*.42, top - s.h*.08, b.w*.16, s.h*.08); ctx.fillStyle = '#ff6b8a'; ctx.beginPath(); ctx.arc(b.x + b.w*.5, top - s.h*.08, 1.6, 0, 7); ctx.globalAlpha = .5 + .5*Math.sin(t*.02); ctx.fill(); ctx.globalAlpha = 1; }
-        if(lit){ for(let r=0;r<4;r++) for(let c=0;c<2;c++){ const k = b.win[(r*2+c)%8]; if(k < lit){ ctx.fillStyle = `rgba(255,224,150,${.6 + .25*Math.sin(t*.004 + k*20)})`; ctx.fillRect(b.x + b.w*(.22 + c*.38), top + b.h*(.15 + r*.2), b.w*.18, b.h*.08); } } }
-        if(roofSnow){ ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.beginPath(); ctx.ellipse(b.x + b.w/2, top, b.w*.55, 2.4, 0, 0, 7); ctx.fill(); }
-      }
-    }
-
-    function drawClouds(s, filter){
-      for(const c of SC.clouds){ if(filter && !filter(c)) continue;
-        c.x += c.v; if(c.x > s.w + 10) c.x = -c.img.width/2;
-        ctx.globalAlpha = c.a; ctx.drawImage(c.img, s.x + c.x - c.img.width/4, s.y + c.y, c.img.width/2, c.img.height/2); }
-      ctx.globalAlpha = 1;
-    }
-
-    function sunny(s){
-      let g = ctx.createLinearGradient(0, s.y, 0, s.y + s.h);
-      g.addColorStop(0, '#4f9cff'); g.addColorStop(.55, '#9fd2ff'); g.addColorStop(1, '#ffd2b0');
-      ctx.fillStyle = g; ctx.fillRect(s.x, s.y, s.w, s.h);
-      const cx = s.x + s.w*.74, cy = s.y + s.h*.26, R = s.h*.13;
-      // 太陽の光の筋（ゆっくり回る、やわらかい）
-      ctx.save(); ctx.translate(cx, cy); ctx.rotate(t*.0007); ctx.globalCompositeOperation = 'lighter';
-      for(let i=0;i<16;i++){ ctx.rotate(Math.PI/8); const len = s.w*(.55 + .08*Math.sin(t*.005 + i)); const rg = ctx.createLinearGradient(0,0,len,0); rg.addColorStop(0,'rgba(255,250,220,.35)'); rg.addColorStop(1,'rgba(255,250,220,0)'); ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len, -len*.035); ctx.lineTo(len, len*.035); ctx.fill(); }
-      ctx.restore();
-      // 光のかさ
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      g = ctx.createRadialGradient(cx, cy, 0, cx, cy, s.h*.6); g.addColorStop(0, 'rgba(255,248,210,.75)'); g.addColorStop(.25, 'rgba(255,236,170,.3)'); g.addColorStop(1, 'rgba(255,236,170,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, s.h*.6, 0, 7); ctx.fill(); ctx.restore();
-      g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R*(1 + .03*Math.sin(t*.012))); g.addColorStop(0, '#ffffff'); g.addColorStop(.7, '#fff7cf'); g.addColorStop(1, 'rgba(255,240,180,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R*1.1, 0, 7); ctx.fill();
-      drawClouds(s);
-      drawCity(s, 'rgba(120,80,160,.55)', .15, false);
-      // レンズフレア
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      const mx = s.x + s.w*.5, my = s.y + s.h*.55;
-      [[.55,10,'255,190,230'],[.9,5,'170,230,255'],[1.25,16,'255,230,170'],[1.6,7,'200,170,255']].forEach(([k,r,c]) => { const x = cx + (mx - cx)*k*1.4, y = cy + (my - cy)*k*1.4; const fg = ctx.createRadialGradient(x,y,0,x,y,r); fg.addColorStop(0,`rgba(${c},.35)`); fg.addColorStop(.7,`rgba(${c},.18)`); fg.addColorStop(1,`rgba(${c},0)`); ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); });
-      // きらめき
-      ctx.fillStyle = '#fff';
-      for(const k of SC.glints){ const a = Math.max(0, Math.sin(t*.008 + k.ph)); if(a < .3) continue; ctx.globalAlpha = a*.9; sparkle4(s.x + k.x*s.w, s.y + k.y*s.h, 2 + a*3); }
-      ctx.restore(); ctx.globalAlpha = 1;
-    }
-
-    function cloudy(s){
-      const g = ctx.createLinearGradient(0, s.y, 0, s.y + s.h);
-      g.addColorStop(0, '#a9a3d6'); g.addColorStop(.6, '#d6cfee'); g.addColorStop(1, '#f1e6f4');
-      ctx.fillStyle = g; ctx.fillRect(s.x, s.y, s.w, s.h);
-      drawClouds(s, c => c.L === 0);
-      // 雲の切れ間から差す光
-      const k = Math.max(0, Math.sin(t*.0022));
-      if(k > .02){ ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = k*.6;
-        for(let i=0;i<3;i++){ const x0 = s.x + s.w*(.55 + i*.09), sg = ctx.createLinearGradient(x0, s.y, x0 - s.w*.25, s.y + s.h);
-          sg.addColorStop(0,'rgba(255,248,225,.55)'); sg.addColorStop(1,'rgba(255,248,225,0)'); ctx.fillStyle = sg;
-          ctx.beginPath(); ctx.moveTo(x0, s.y); ctx.lineTo(x0 + s.w*.04, s.y); ctx.lineTo(x0 - s.w*.18, s.y + s.h); ctx.lineTo(x0 - s.w*.3, s.y + s.h); ctx.fill(); }
-        ctx.restore(); }
-      drawClouds(s, c => c.L === 1);
-      drawCity(s, 'rgba(110,96,160,.6)', .3, false);
-      drawClouds(s, c => c.L === 2);
-    }
-
-    function drop(x, y, r){
-      const g = ctx.createRadialGradient(x - r*.3, y - r*.3, 0, x, y, r);
-      g.addColorStop(0, 'rgba(255,255,255,.85)'); g.addColorStop(.5, 'rgba(200,215,255,.35)'); g.addColorStop(1, 'rgba(120,140,220,.25)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
-    }
-    function rain(s){
-      const g = ctx.createLinearGradient(0, s.y, 0, s.y + s.h);
-      g.addColorStop(0, '#2f3a6e'); g.addColorStop(.6, '#5a6aa8'); g.addColorStop(1, '#8c90c4');
-      ctx.fillStyle = g; ctx.fillRect(s.x, s.y, s.w, s.h);
-      // 遠くの雨のもや
-      ctx.fillStyle = 'rgba(200,210,255,.08)'; ctx.fillRect(s.x, s.y + s.h*.45, s.w, s.h*.55);
-      drawClouds(s, c => c.L === 0);
-      drawCity(s, 'rgba(30,34,80,.75)', .55, false);
-      drawClouds(s, c => c.L === 1);
-      // 雨すじ（奥・中・手前）
-      const wind = -.18;
-      for(const r of SC.streaks){
-        const sp = .005 + r.z*.008, len = 6 + r.z*14;
-        r.y += sp; r.x += sp*wind*.6; if(r.y > 1.05){ r.y = -.05; r.x = rnd(-.1, 1.1);
-          if(r.z > .7 && SC.splash.length < 12) SC.splash.push({ x: r.x, life: 1 }); }
-        const x = s.x + r.x*s.w, y = s.y + r.y*s.h;
-        ctx.strokeStyle = `rgba(220,232,255,${.25 + r.z*.5})`; ctx.lineWidth = .6 + r.z*1.1;
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + wind*len, y + len); ctx.stroke();
-      }
-      // 地面のはね
-      for(const p of SC.splash){ p.life -= .025; const x = s.x + p.x*s.w, y = s.y + s.h - 3;
-        ctx.strokeStyle = `rgba(230,238,255,${p.life*.6})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x, y, (1 - p.life)*7 + 1, (1 - p.life)*2 + .5, 0, 0, 7); ctx.stroke(); }
-      SC.splash = SC.splash.filter(p => p.life > 0);
-      // ときどき遠くで光る
-      if(--SC.nextFlash <= 0){ SC.flash = 1; SC.nextFlash = Math.floor(rnd(1200, 2400)); }
-      if(SC.flash > 0){ ctx.fillStyle = `rgba(230,236,255,${Math.sin(SC.flash*Math.PI)*.18})`; ctx.fillRect(s.x, s.y, s.w, s.h); SC.flash -= .02; }
-      // スクリーンのガラスについた雨粒
-      for(const b of SC.beads) drop(s.x + b.x*s.w, s.y + b.y*s.h, b.r);
-      for(const d of SC.slides){
-        d.y += d.v * (1 + .5*Math.sin(t*.015 + d.x*20)); d.trail.push(d.y); if(d.trail.length > 120) d.trail.shift();
-        if(d.y > 1.05){ d.y = rnd(-.3, 0); d.x = rnd(.05,.95); d.trail = []; }
-        ctx.strokeStyle = 'rgba(230,240,255,.22)'; ctx.lineWidth = d.r*.9; ctx.lineCap = 'round';
-        if(d.trail.length > 1){ ctx.beginPath(); ctx.moveTo(s.x + d.x*s.w, s.y + d.trail[0]*s.h); ctx.lineTo(s.x + d.x*s.w, s.y + d.y*s.h); ctx.stroke(); }
-        drop(s.x + d.x*s.w, s.y + d.y*s.h, d.r);
-      }
-    }
-
-    function snow(s){
-      const g = ctx.createLinearGradient(0, s.y, 0, s.y + s.h);
-      g.addColorStop(0, '#8fa4dd'); g.addColorStop(.6, '#c9d4f4'); g.addColorStop(1, '#eef2ff');
-      ctx.fillStyle = g; ctx.fillRect(s.x, s.y, s.w, s.h);
-      drawClouds(s);
-      drawCity(s, 'rgba(110,120,180,.55)', .4, true);
-      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(s.x, s.y + s.h - 3, s.w, 3);
-      const wind = Math.sin(t*.0015)*.0006;
-      for(const f of SC.flakes){
-        const sp = .0005 + f.z*.0014;
-        f.y += sp; f.x += wind*(.5 + f.z) + Math.sin(t*.007 + f.ph)*.0004*(1 + f.z);
-        if(f.y > 1.03){ f.y = -.03; f.x = rnd(0,1); } if(f.x > 1.05) f.x = -.05; if(f.x < -.05) f.x = 1.05;
-        const x = s.x + f.x*s.w, y = s.y + f.y*s.h, r = .8 + f.z*3.2;
-        if(f.z > .82){ const bg = ctx.createRadialGradient(x,y,0,x,y,r*1.8); bg.addColorStop(0,'rgba(255,255,255,.75)'); bg.addColorStop(1,'rgba(255,255,255,0)'); ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(x,y,r*1.8,0,7); ctx.fill(); }
-        else { ctx.fillStyle = `rgba(255,255,255,${.55 + f.z*.4})`; ctx.beginPath(); ctx.arc(x,y,r*.6,0,7); ctx.fill(); }
-        if(f.z > .6 && Math.sin(t*.02 + f.ph*5) > .985){ ctx.fillStyle = '#fff'; sparkle4(x, y, r*1.6); }
-      }
-    }
+    const GL = makeGL();
 
     function screen(){
       const s = scr();
-      if(!SC || SC.s.w !== s.w) initScreen();
       ctx.save(); roundRect(ctx, s.x, s.y, s.w, s.h, s.r); ctx.clip();
-      ({ sunny, cloudy, rain, snow })[key](s);
+      if (GL) {
+        const d = Math.min(2, devicePixelRatio||1);
+        GL.draw(Math.round(s.w*d), Math.round(s.h*d));
+        ctx.drawImage(GL.c, s.x, s.y, s.w, s.h);
+      } else {
+        const g = ctx.createLinearGradient(0, s.y, 0, s.y + s.h);
+        g.addColorStop(0, FALLBACK[key][0]); g.addColorStop(1, FALLBACK[key][1]); ctx.fillStyle = g; ctx.fillRect(s.x, s.y, s.w, s.h);
+      }
       // 画面の質感（走査線とガラスの反射）
       ctx.fillStyle = 'rgba(255,255,255,.04)'; for(let y = s.y; y < s.y + s.h; y += 3) ctx.fillRect(s.x, y, s.w, 1);
       const gl = ctx.createLinearGradient(s.x, s.y, s.x + s.w*.6, s.y + s.h*.6);
@@ -580,34 +630,74 @@ const KEY = new URLSearchParams(location.search).get('k');
 
   // ---- 図鑑 ----
   const WX_JA = { sunny: '晴れ', cloudy: '曇り', rain: '雨', snow: '雪' };
-  async function renderBook() {
-    const b = await api('/api/collection');
-    $('bookCount').textContent = `${b.owned} / ${b.total}`;
-    const book = $('book'); book.innerHTML = '';
-    if (!b.total) { book.innerHTML = '<p class="empty">images フォルダに画像を入れると、ここにカードが並ぶよ。</p>'; return; }
-    const groups = new Map();
-    for (const c of b.cards) { if (!groups.has(c.member)) groups.set(c.member, []); groups.get(c.member).push(c); }
-    const unitOf = Object.fromEntries((T.members || []).map(m => [m.name, m.unit]));
-    for (const [member, cards] of groups) {
-      const g = document.createElement('div'); g.className = 'group';
-      const own = cards.filter(c => c.count).length;
-      g.innerHTML = `<h3><span></span><small>${unitOf[member] || ''}　${own}/${cards.length}</small></h3><div class="grid"></div>`;
-      g.querySelector('span').textContent = member;
-      const grid = g.querySelector('.grid');
-      for (const c of cards) {
-        const s = document.createElement('button'); s.type = 'button'; s.className = 'slot';
-        if (c.count) {
-          s.innerHTML = `<img alt=""><span class="r">${c.rarity}</span>${c.count > 1 ? `<span class="n">×${c.count}</span>` : ''}`;
-          img(c.url).then(u => { if (u) s.querySelector('img').src = u; });
-          s.addEventListener('click', () => openCard(c));
-          s.setAttribute('aria-label', `${member} ${c.rarity}`);
-        } else {
-          s.textContent = c.weather ? `${WX_JA[c.weather]}?` : '?'; s.disabled = true; s.setAttribute('aria-label', 'まだ持っていないカード');
-        }
-        grid.appendChild(s);
+  // 絞り込み（天気・レア度）。any は「どの天気でも」のカード
+  const FILTERS = [
+    { key: 'weather', label: '天気', opts: [['all', 'すべて'], ['sunny', '晴れ'], ['cloudy', '曇り'], ['rain', '雨'], ['snow', '雪'], ['any', 'どの天気でも']] },
+    { key: 'rarity', label: 'レア度', opts: [['all', 'すべて'], ['N', 'N'], ['R', 'R'], ['SR', 'SR']] },
+  ];
+  const filt = { weather: 'all', rarity: 'all' };
+  let bookData = null;
+  const passes = c => (filt.weather === 'all' || (filt.weather === 'any' ? !c.weather : c.weather === filt.weather))
+    && (filt.rarity === 'all' || c.rarity === filt.rarity);
+  function renderFilters() {
+    const box = $('filters'); box.innerHTML = '';
+    for (const f of FILTERS) {
+      const row = document.createElement('div'); row.className = 'chips'; row.setAttribute('role', 'group'); row.setAttribute('aria-label', f.label);
+      row.innerHTML = `<b>${f.label}</b>`;
+      for (const [v, text] of f.opts) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = text;
+        b.setAttribute('aria-pressed', String(filt[f.key] === v));
+        b.addEventListener('click', () => { filt[f.key] = v; renderFilters(); drawBook(); });
+        row.appendChild(b);
       }
-      book.appendChild(g);
+      box.appendChild(row);
     }
+  }
+  function slot(c, label) {
+    const s = document.createElement('button'); s.type = 'button'; s.className = 'slot';
+    if (c.count) {
+      s.innerHTML = `<img alt=""><span class="r">${c.rarity}</span>${c.count > 1 ? `<span class="n">×${c.count}</span>` : ''}`;
+      img(c.url).then(u => { if (u) s.querySelector('img').src = u; });
+      s.addEventListener('click', () => openCard(c));
+      s.setAttribute('aria-label', `${label} ${c.rarity}`);
+    } else {
+      s.textContent = c.weather ? `${WX_JA[c.weather]}?` : '?'; s.disabled = true; s.setAttribute('aria-label', 'まだ持っていないカード');
+    }
+    return s;
+  }
+  function group(title, sub, cards, mini) {
+    const g = document.createElement('div'); g.className = 'group';
+    const own = cards.filter(c => c.count).length;
+    g.innerHTML = `<h3><span></span><small></small></h3>`;
+    g.querySelector('span').textContent = title;
+    g.querySelector('small').textContent = `${sub ? sub + '　' : ''}${own}/${cards.length}`;
+    if (cards.length) { const grid = document.createElement('div'); grid.className = 'grid'; cards.forEach(c => grid.appendChild(slot(c, title))); g.appendChild(grid); }
+    // 2人それぞれの段にも、デュエットを小さく出す
+    if (mini && mini.length) {
+      const h = document.createElement('p'); h.className = 'mini-h'; h.textContent = 'デュエット'; g.appendChild(h);
+      const grid = document.createElement('div'); grid.className = 'grid mini'; mini.forEach(c => grid.appendChild(slot(c, c.member))); g.appendChild(grid);
+    }
+    return g;
+  }
+  async function renderBook() {
+    bookData = await api('/api/collection');
+    $('bookCount').textContent = `${bookData.owned} / ${bookData.total}`;
+    renderFilters(); drawBook();
+  }
+  function drawBook() {
+    const b = bookData, book = $('book'); book.innerHTML = '';
+    if (!b) return;
+    if (!b.total) { book.innerHTML = '<p class="empty">images フォルダに画像を入れると、ここにカードが並ぶよ。</p>'; return; }
+    const shown = b.cards.filter(passes);
+    const solo = shown.filter(c => !c.duet), duets = shown.filter(c => c.duet);
+    const names = [...new Set(solo.map(c => c.member)), ...(T.members || []).map(m => m.name)];
+    const unitOf = Object.fromEntries((T.members || []).map(m => [m.name, m.unit]));
+    for (const name of new Set(names)) {
+      const mine = solo.filter(c => c.member === name), mini = duets.filter(c => (c.members || []).includes(name));
+      if (mine.length || mini.length) book.appendChild(group(name, unitOf[name], mine, mini));
+    }
+    if (duets.length) book.appendChild(group('デュエット', '', duets));
+    if (!shown.length) book.innerHTML = '<p class="empty">この条件のカードは、まだないよ。</p>';
   }
   async function openCard(c) {
     const m = document.createElement('div'); m.className = 'modal';
