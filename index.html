@@ -209,10 +209,10 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
           </div>
         </div>
       </div>
-      <div class="idle" id="idle">タップで、今日のカードを</div>
+      <div class="idle" id="idle">今日のカードをタップ</div>
       <div class="speech" id="speech"></div>
     </div>
-    <button class="btn" id="pull" type="button"><small>1日1回 無料</small>カードを引く</button>
+    <button class="btn" id="pull" type="button">カードを引く</button>
   </section>
 
   <!-- book -->
@@ -690,9 +690,9 @@ const KEY = new URLSearchParams(location.search).get('k');
     if (!b.total) { book.innerHTML = '<p class="empty">images フォルダに画像を入れると、ここにカードが並ぶよ。</p>'; return; }
     const shown = b.cards.filter(passes);
     const solo = shown.filter(c => !c.duet), duets = shown.filter(c => c.duet);
-    const names = [...new Set(solo.map(c => c.member)), ...(T.members || []).map(m => m.name)];
+    const names = new Set([...(T.members || []).map(m => m.name), ...solo.map(c => c.member)]); // members.json の順
     const unitOf = Object.fromEntries((T.members || []).map(m => [m.name, m.unit]));
-    for (const name of new Set(names)) {
+    for (const name of names) {
       const mine = solo.filter(c => c.member === name), mini = duets.filter(c => (c.members || []).includes(name));
       if (mine.length || mini.length) book.appendChild(group(name, unitOf[name], mine, mini));
     }
@@ -703,28 +703,30 @@ const KEY = new URLSearchParams(location.search).get('k');
     const m = document.createElement('div'); m.className = 'modal';
     const src = await img(c.url);
     m.innerHTML = `<div class="modal-card"><img alt=""><h4></h4><ul class="hist"></ul></div>`;
-    m.querySelector('img').src = src || ''; m.querySelector('h4').textContent = `${c.member}　${c.rarity}${c.weather ? '・' + WX_JA[c.weather] + 'の日限定' : ''}`;
+    m.querySelector('img').src = src || ''; m.querySelector('h4').textContent = `${c.member}　${c.rarity}${c.weather ? '・' + WX_JA[c.weather] + 'の日だけ' : ''}`;
     const ul = m.querySelector('.hist');
-    for (const h of [...c.history].reverse()) { const li = document.createElement('li'); li.innerHTML = '<b></b><span></span>'; li.querySelector('b').textContent = `${h.date} ${WX_JA[h.weather] || ''}`; li.querySelector('span').textContent = h.line || ''; ul.appendChild(li); }
+    for (const h of [...c.history].reverse()) { const li = document.createElement('li'); li.innerHTML = '<b></b><span></span>'; li.querySelector('b').textContent = `${h.date} ${WX_JA[h.weather] || ''}`; li.querySelector('span').textContent = h.lines ? h.lines.map(l => `${l.name}「${l.text}」`).join('\n') : (h.line || ''); ul.appendChild(li); }
     m.addEventListener('click', () => m.remove());
     document.body.appendChild(m);
   }
 
   // ---- カード演出（星・スポットライト・光の粒） ----
   const RAR = { N:{label:'N',color:'#c9b8ff',rim:'#ffffff',bg:'#a99cbd'}, R:{label:'R',color:'#7ff0de',rim:'#3fd6c0',bg:'#2fb8a4'},
-    SR:{label:'SR',color:'#ffd27a',rim:'#ffc85a',bg:'#e0a321'}, LTD:{label:'Limited',color:'#9ec0ff',rim:'#7fa2ff',bg:'#5b8cff'} };
+    SR:{label:'SR',color:'#ffd27a',rim:'#ffc85a',bg:'#e0a321'}, LTD:{label:null,color:'#9ec0ff',rim:'#7fa2ff',bg:'#5b8cff'} }; // LTD（雨・雪の日のカード）は色だけ変えて、札にはレア度を出す
   const cv = $('fx'), ctx = cv.getContext('2d'); let P = [], S = [], mode = 'idle', tint = '#ffffff', t = 0;
   const W = () => cv.getBoundingClientRect().width, H = () => cv.getBoundingClientRect().height;
   function size(){ const r = cv.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); cv.width = r.width*d; cv.height = r.height*d; ctx.setTransform(d,0,0,d,0,0); makeStars(); }
   function makeStars(){ S=[]; const n=Math.round(W()*H()/1400); for(let i=0;i<n;i++) S.push({x:Math.random()*W(),y:Math.random()*H()*.8,r:.5+Math.random()*1.2,ph:Math.random()*6,sp:.02+Math.random()*.05,big:Math.random()<.08}); }
   addEventListener('resize', size);
-  const BEAMS=[{x:.04,base:24,sw:-14,w:.16,c:'tint',o:0,a:40},{x:.30,base:9,sw:9,w:.09,c:'#ffffff',o:0,a:15},{x:.70,base:-9,sw:-9,w:.09,c:'#ffffff',o:0,a:-15},{x:.96,base:-24,sw:14,w:.16,c:'tint',o:0,a:-40}];
+  // 外側の2本は左右の色（ふだんはレア度の色、デュエットは2人それぞれの色）
+  let tintL = tint, tintR = tint;
+  const BEAMS=[{x:.04,base:24,sw:-14,w:.16,c:'L',o:0,a:40},{x:.30,base:9,sw:9,w:.09,c:'#ffffff',o:0,a:15},{x:.70,base:-9,sw:-9,w:.09,c:'#ffffff',o:0,a:-15},{x:.96,base:-24,sw:14,w:.16,c:'R',o:0,a:-40}];
   const aim = b => Math.atan2(W()/2 - b.x*W(), H()*.5 + H()*.06) * 180 / Math.PI;
   const rgba = (hex,a) => { const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; };
   function sparkle(x,y,s,rot){ ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.beginPath();ctx.moveTo(0,-s);ctx.quadraticCurveTo(s*.12,-s*.12,s,0);ctx.quadraticCurveTo(s*.12,s*.12,0,s);ctx.quadraticCurveTo(-s*.12,s*.12,-s,0);ctx.quadraticCurveTo(-s*.12,-s*.12,0,-s);ctx.fill();ctx.restore(); }
   function drawBeam(b){
     if (b.o <= .01) return;
-    const x0=b.x*W(), y0=-H()*.06, L=H()*1.35, ang=b.a*Math.PI/180, col=b.c==='tint'?tint:b.c, fl=.92+.08*Math.sin(t*.21+b.x*9)*Math.sin(t*.07);
+    const x0=b.x*W(), y0=-H()*.06, L=H()*1.35, ang=b.a*Math.PI/180, col=b.c==='L'?tintL:b.c==='R'?tintR:b.c, fl=.92+.08*Math.sin(t*.21+b.x*9)*Math.sin(t*.07);
     const ex=x0+Math.sin(ang)*L, ey=y0+Math.cos(ang)*L;
     for(let k=0;k<7;k++){ const w=b.w*(1-k*.13), a=b.o*fl*(k===6?.22:.07); const g=ctx.createLinearGradient(x0,y0,ex,ey);
       g.addColorStop(0,rgba(col,a*1.6)); g.addColorStop(.35,rgba(col,a)); g.addColorStop(.8,rgba(col,a*.25)); g.addColorStop(1,rgba(col,0));
@@ -797,18 +799,36 @@ const KEY = new URLSearchParams(location.search).get('k');
     const src = await img(p.url);
     $('art').querySelector('img')?.remove();
     if (src) { const im = document.createElement('img'); im.src = src; im.alt = p.member; $('art').prepend(im); }
-    $('rar').textContent = R.label; $('rar').style.setProperty('--rarbg', R.bg);
+    $('rar').textContent = R.label || p.rarity || 'N'; $('rar').style.setProperty('--rarbg', R.bg);
     $('front').style.setProperty('--rim', R.rim);
     $('cardName').textContent = p.member; $('cardDate').textContent = p.date.replaceAll('-', '.');
-    $('speaker').textContent = p.member; $('speechText').textContent = p.line || '';
+    setSpeech(p);
     $('newtag').style.opacity = 0; $('newtag').hidden = !isNew;
     document.documentElement.style.setProperty('--beam', R.color); $('edge').style.setProperty('--edge', R.color); tint = R.color;
+    // デュエットは、左右のスポットライトと足もとの光を2人の色にする
+    const duo = p.duet && p.members?.length === 2;
+    tintL = (duo && colorOf(p.members[0])) || R.color; tintR = (duo && colorOf(p.members[1])) || R.color;
+    $('haze').style.background = duo ? `radial-gradient(45% 60% at 25% 100%,${tintL} 0%,transparent 70%),radial-gradient(45% 60% at 75% 100%,${tintR} 0%,transparent 70%)` : '';
     return R;
   }
+  const colorOf = name => (T.members || []).find(m => m.name === name)?.color || null;
+  // 吹き出し。デュエットは名前つきで2つ並べる
+  function setSpeech(p) {
+    const rows = p.lines?.length ? p.lines : [{ name: p.member, text: p.line || '' }];
+    const box = $('speech'); box.innerHTML = ''; box.classList.toggle('duo', rows.length > 1);
+    for (const r of rows) {
+      const el = document.createElement('p'); el.innerHTML = '<small></small><span></span>';
+      el.querySelector('small').textContent = r.name; el.querySelector('span').textContent = r.text;
+      const c = colorOf(r.name); if (c) el.style.setProperty('--who', c);
+      box.appendChild(el);
+    }
+  }
+  // 吹き出しが2つの時は、カードを少し上げて重ならないようにする
+  const liftOf = p => (p.lines?.length > 1 ? -54 : -30);
   function showPulled(p) { // 今日はもう引いた
     fillFront(p, false).then(() => {
       $('idle').hidden = true; gsap.set('#card', { rotateY: 180 }); gsap.set('#rar', { clipPath: 'inset(0 0% 0 0)' });
-      gsap.set('#speech', { opacity: 1, y: 0 }); gsap.set('#night', { opacity: .45 }); gsap.set('#cardWrap', { y: -30 });
+      gsap.set('#speech', { opacity: 1, y: 0 }); gsap.set('#night', { opacity: .45 }); gsap.set('#cardWrap', { y: liftOf(p) });
     });
     $('pull').disabled = true; $('pull').innerHTML = '<small>今日はもう引いたよ</small>また明日';
   }
@@ -825,7 +845,7 @@ const KEY = new URLSearchParams(location.search).get('k');
     const Rk = rarityKey(r.pull), big = Rk === 'SR' || Rk === 'LTD';
     await fillFront(r.pull, r.isNew);
     const done = () => { busy = false; $('pull').innerHTML = '<small>今日はもう引いたよ</small>また明日'; bookDirty = true; };
-    if (reduce) { $('idle').hidden = true; gsap.set('#card',{rotateY:180}); gsap.set('#rar',{clipPath:'inset(0 0% 0 0)'}); gsap.set('#speech',{opacity:1,y:0}); done(); return; }
+    if (reduce) { $('idle').hidden = true; gsap.set('#card',{rotateY:180}); gsap.set('#rar',{clipPath:'inset(0 0% 0 0)'}); gsap.set('#speech',{opacity:1,y:0}); gsap.set('#cardWrap',{y:liftOf(r.pull)}); done(); return; }
 
     gsap.killTweensOf('#cardWrap'); gsap.set('#cardWrap',{y:0,scale:1});
     const edgeTurn = { a: 0 };
@@ -855,7 +875,7 @@ const KEY = new URLSearchParams(location.search).get('k');
       .set('#sheen',{opacity:0})
       .to('#rar',{clipPath:'inset(0 0% 0 0)',duration:.45,ease:'power3.out'},'pop+=.6')
       .to('#newtag',{opacity:1,duration:.3},'pop+=.8')
-      .to('#cardWrap',{y:-30,scale:1,duration:.7,ease:'power3.out'},'pop+=.9')
+      .to('#cardWrap',{y:liftOf(r.pull),scale:1,duration:.7,ease:'power3.out'},'pop+=.9')
       .to('#speech',{opacity:1,y:0,duration:.6,ease:'power2.out'},'pop+=1.05');
   }
   $('pull').addEventListener('click', pull);
