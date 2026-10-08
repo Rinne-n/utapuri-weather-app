@@ -150,6 +150,12 @@ button{font:inherit;color:inherit}
 .say .who img{position:absolute;width:260%;max-width:none;left:-123%;top:-17%}
 .say .txt{background:#fff;border-radius:4px 16px 16px 16px;padding:8px 12px;line-height:1.6}
 .say .txt small{display:block;font-family:var(--display);font-weight:800;font-size:11px;color:var(--pink)}
+/* ちびキャラ（1枚の絵を、足もとを軸にして動かす） */
+.talk.with-chibi .say{grid-template-columns:64px minmax(0,1fr);align-items:end}
+.talk.with-chibi .say .who{justify-self:center;align-self:start}
+.say .pose,.say .bob{height:76px;display:flex;align-items:flex-end;justify-content:center;transform-origin:50% 100%}
+.say .pose{width:64px}
+.say .pose img{max-width:64px;max-height:76px;object-fit:contain;transform-origin:50% 100%;filter:drop-shadow(0 3px 3px rgba(58,35,80,.18))}
 .empty{text-align:center;color:var(--ink-soft);font-size:13px;line-height:1.8;padding:24px 8px}
 
 /* tabs */
@@ -267,7 +273,7 @@ const KEY = new URLSearchParams(location.search).get('k');
   async function img(url) {
     if (!url) return null;
     if (imgCache.has(url)) return imgCache.get(url);
-    const p = fetch(CONFIG.apiBase + url, { headers: { 'ngrok-skip-browser-warning': '1' } })
+    const p = fetch(CONFIG.apiBase + url, { headers: { 'ngrok-skip-browser-warning': '1', ...(KEY ? { 'X-Key': KEY } : {}) } }) // ちびは合言葉が要る
       .then(r => r.ok ? r.blob() : null).then(b => b ? URL.createObjectURL(b) : null).catch(() => null);
     imgCache.set(url, p);
     return p;
@@ -617,15 +623,78 @@ const KEY = new URLSearchParams(location.search).get('k');
     if (!T.talk || !T.talk.length) { box.innerHTML = '<p class="empty">今日の楽屋トークは、朝6:00の準備で届くよ。<br>明日の朝をお楽しみに。</p>'; return; }
     box.innerHTML = '';
     const members = T.members || [];
+    talkRows = [];
     for (const t of T.talk) {
       const row = document.createElement('div'); row.className = 'say';
-      row.innerHTML = `<div class="who">${t.name.slice(0, 3)}</div><div class="txt"><small></small><span></span></div>`;
+      // 「来栖翔」のようなフルネームでも見つける
+      const m = members.find(m => m.name === t.name) || members.find(m => t.name.includes(m.name));
+      const r = { row, text: String(t.text || ''), name: m?.name || String(t.name || '') };
+      if (m?.chibi) {
+        // ちびがいる時は、丸いアイコンの代わりに、ちびをセリフの横に立たせる
+        row.innerHTML = '<div class="pose"><div class="bob"><img alt=""></div></div><div class="txt"><small></small><span></span></div>';
+        Object.assign(r, { pose: row.querySelector('.pose'), bob: row.querySelector('.bob'), im: row.querySelector('.pose img') });
+        img(m.chibi).then(u => { if (u) r.im.src = u; });
+      } else {
+        // ちびがない時は、今までどおり丸いアイコンに基準の画像
+        row.innerHTML = '<div class="who"></div><div class="txt"><small></small><span></span></div>';
+        row.querySelector('.who').textContent = String(t.name || '').slice(0, 3);
+        if (m?.face) img(m.face).then(u => { if (u) row.querySelector('.who').innerHTML = `<img src="${u}" alt="">`; });
+      }
       row.querySelector('small').textContent = t.name; row.querySelector('span').textContent = t.text;
-      // 丸いアイコンに基準の画像（「来栖翔」のようなフルネームでも見つける）
-      const face = (members.find(m => m.name === t.name) || members.find(m => t.name.includes(m.name)))?.face;
-      if (face) img(face).then(u => { if (u) row.querySelector('.who').innerHTML = `<img src="${u}" alt="">`; });
       box.appendChild(row);
+      talkRows.push(r);
     }
+    box.classList.toggle('with-chibi', talkRows.some(r => r.pose));
+    talkPlayed = false;
+    gsap.set(talkRows.map(r => r.row), { opacity: 0 });
+    if (!$('s-talk').hidden) playTalk();
+  }
+
+  // セリフを1行ずつ出す。話している子のちびは、ぴょこっと出て息をするように揺れ、前の子は静かに待つ
+  let talkRows = [], talkPlayed = false;
+  const seedOf = name => [...name].reduce((a, c) => a + c.codePointAt(0), 0);
+  function speak(r) {
+    if (!r.pose) return;
+    gsap.to(r.pose, { scale: 1, opacity: 1, duration: .8, ease: 'sine.out' });
+    if (reduce) { gsap.set(r.im, { opacity: 1 }); return; }
+    // 出る時：下から出て、潰れる→伸びる→着地
+    const s = seedOf(r.name), k = (s % 7) / 7, dir = s % 2 ? 1 : -1;
+    gsap.timeline()
+      .fromTo(r.im, { y: 24, opacity: 0, scaleX: .94, scaleY: 1.06 }, { y: 0, opacity: 1, scaleX: 1, scaleY: 1, duration: .7, ease: 'power2.out' })
+      .to(r.im, { scaleX: 1.1, scaleY: .88, duration: .22, ease: 'sine.out' })
+      .to(r.im, { scaleX: .96, scaleY: 1.05, duration: .3, ease: 'sine.inOut' })
+      .to(r.im, { scaleX: 1, scaleY: 1, duration: .4, ease: 'sine.out' });
+    // 話している間：ゆっくり息をするように上下し、少しだけ左右に揺れる（メンバーごとに速さと向きをずらす）
+    const breath = 1.9 + k * .7, sway = 2.8 + k * 1.2, amp = 1.6 + k * 1.2;
+    r.tw = [
+      gsap.to(r.bob, { y: -3, duration: breath, delay: 1.6 + k * .5, yoyo: true, repeat: -1, ease: 'sine.inOut' }),
+      gsap.timeline({ repeat: -1, delay: 1.6 })
+        .to(r.bob, { rotation: amp * dir, duration: sway / 2, ease: 'sine.inOut' })
+        .to(r.bob, { rotation: -amp * dir, duration: sway, ease: 'sine.inOut' })
+        .to(r.bob, { rotation: 0, duration: sway / 2, ease: 'sine.inOut' }),
+    ];
+  }
+  function rest(r) {
+    if (!r.pose) return;
+    (r.tw || []).forEach(t => t.kill()); r.tw = null;
+    // 待っている間：動きを止めて、少し小さく・薄く
+    if (reduce) { gsap.set(r.bob, { y: 0, rotation: 0 }); gsap.set(r.pose, { scale: .9, opacity: .55 }); return; }
+    gsap.to(r.bob, { y: 0, rotation: 0, duration: .9, ease: 'sine.out' });
+    gsap.to(r.pose, { scale: .9, opacity: .55, duration: .9, ease: 'sine.out' });
+  }
+  function playTalk() {
+    if (talkPlayed || !talkRows.length) return;
+    talkPlayed = true;
+    let at = 0;
+    talkRows.forEach((r, i) => {
+      gsap.delayedCall(at, () => {
+        talkRows.slice(0, i).forEach(rest);
+        if (r.pose) gsap.set(r.im, { opacity: 0 });
+        gsap.fromTo(r.row, { opacity: 0, y: reduce ? 0 : 8 }, { opacity: 1, y: 0, duration: reduce ? .9 : .7, ease: 'sine.out' });
+        speak(r);
+      });
+      at += Math.min(4.2, 1.8 + r.text.length * .05); // 長いセリフほど、次までゆっくり待つ
+    });
   }
 
   // ---- 図鑑 ----
@@ -887,6 +956,7 @@ const KEY = new URLSearchParams(location.search).get('k');
     document.querySelectorAll('.tabs button').forEach(b => b.dataset.tab === tab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
     document.querySelectorAll('.screen').forEach(s => s.hidden = s.id !== 's-' + tab);
     if (tab === 'card' && !fxStarted) { fxStarted = true; size(); if (!reduce) { loop(); gsap.to('#cardWrap',{y:-8,duration:1.8,yoyo:true,repeat:-1,ease:'sine.inOut'}); } }
+    if (tab === 'talk') playTalk();
     if (tab === 'book' && bookDirty) { bookDirty = false; renderBook().catch(e => toast(e.message)); }
   }
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => show(b.dataset.tab)));
